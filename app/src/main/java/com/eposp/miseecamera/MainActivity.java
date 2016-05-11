@@ -1,10 +1,13 @@
 package com.eposp.miseecamera;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.hardware.Camera;
+import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.design.widget.FloatingActionButton;
@@ -28,14 +31,19 @@ import android.widget.Toast;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+/**
+ * 黑屏状态下拍照
+ */
 public class MainActivity extends AppCompatActivity {
     private View layout;
     private Camera camera;
     private Camera.Parameters parameters = null;
     private boolean isTakePicOk = true;//false没拍照完成
+    Context mContext;
 
     Bundle bundle = null; // 声明一个Bundle对象，用来存储数据
 //    int
@@ -50,6 +58,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.carmera_layout);
+        mContext = MainActivity.this;
         layout = this.findViewById(R.id.buttonLayout);
 
         SurfaceView surfaceView = (SurfaceView) this
@@ -59,7 +68,7 @@ public class MainActivity extends AppCompatActivity {
         surfaceView.getHolder().setFixedSize(176, 144); //设置Surface分辨率
         surfaceView.getHolder().setKeepScreenOn(true);// 屏幕常亮
         surfaceView.getHolder().addCallback(new SurfaceCallback());//为SurfaceView的句柄添加一个回调函数
-
+        AudioUtils.setMinVolume(mContext);
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
@@ -145,25 +154,53 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void surfaceChanged(SurfaceHolder holder, int format, int width,
                                    int height) {
-            parameters = camera.getParameters(); // 获取各项参数
-            parameters.setPictureFormat(PixelFormat.JPEG); // 设置图片格式
-            parameters.setPreviewSize(width, height); // 设置预览大小
-            parameters.setPreviewFrameRate(5);  //设置每秒显示4帧
-            parameters.setPictureSize(width, height); // 设置保存的图片尺寸
-            parameters.setJpegQuality(80); // 设置照片质量
+//            parameters = camera.getParameters(); // 获取各项参数
+//            parameters.setPictureFormat(PixelFormat.JPEG); // 设置图片格式
+//            parameters.setPreviewSize(width, height); // 设置预览大小
+//            parameters.setPreviewFrameRate(5);  //设置每秒显示4帧
+//            parameters.setPictureSize(width, height); // 设置保存的图片尺寸
+//            parameters.setJpegQuality(100); // 设置照片质量
+
+
+//实现自动对焦
+            camera.autoFocus(new Camera.AutoFocusCallback() {
+                @Override
+                public void onAutoFocus(boolean success, Camera camera) {
+                    if(success){
+                        initCamera();//实现相机的参数初始化
+                        camera.cancelAutoFocus();//只有加上了这一句，才会自动对焦。
+                    }
+                }
+
+            });
         }
 
         // 开始拍照时调用该方法
         @Override
         public void surfaceCreated(SurfaceHolder holder) {
-            try {
-//                camera = Camera.open(1); // 打开摄像头,一般//1代表前置摄像头，0代表后置摄像头
-                camera = Camera.open(); // 打开摄像头,一般//1代表前置摄像头，0代表后置摄像头
-                camera.setPreviewDisplay(holder); // 设置用于显示拍照影像的SurfaceHolder对象
-                camera.setDisplayOrientation(getPreviewDegree(MainActivity.this));
-                camera.startPreview(); // 开始预览
-            } catch (Exception e) {
-                e.printStackTrace();
+//            try {
+////                camera = Camera.open(1); // 打开摄像头,一般//1代表前置摄像头，0代表后置摄像头
+//                camera = Camera.open(); // 打开摄像头,一般//1代表前置摄像头，0代表后置摄像头
+//                camera.setPreviewDisplay(holder); // 设置用于显示拍照影像的SurfaceHolder对象
+////                camera.setDisplayOrientation(getPreviewDegree(MainActivity.this));
+//                camera.setDisplayOrientation(270);
+//                camera.startPreview(); // 开始预览
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+
+
+
+            if(null==camera){
+                camera=Camera.open();
+                try {
+                    camera.setPreviewDisplay(holder);
+                    initCamera();
+                    camera.startPreview();
+                } catch (IOException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
             }
 
         }
@@ -172,12 +209,59 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void surfaceDestroyed(SurfaceHolder holder) {
             if (camera != null) {
-                camera.release(); // 释放照相机
-                camera = null;
+                camera.stopPreview();
+                camera.release();
+                camera=null;
+
             }
         }
     }
 
+    //相机参数的初始化设置
+    private void initCamera() {
+        parameters = camera.getParameters();
+        parameters.setPictureFormat(PixelFormat.JPEG);
+        //parameters.setPictureSize(surfaceView.getWidth(), surfaceView.getHeight());  // 部分定制手机，无法正常识别该方法。
+//        parameters.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);//开启闪光灯
+        parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);//1连续对焦
+        parameters.setJpegQuality(100); // 设置照片质量
+        setDispaly(parameters, camera);
+        camera.setParameters(parameters);
+        camera.startPreview();
+        camera.cancelAutoFocus();// 2如果要实现连续的自动对焦，这一句必须加上
+
+
+//        parameters = camera.getParameters(); // 获取各项参数
+//        parameters.setPictureFormat(PixelFormat.JPEG); // 设置图片格式
+//        parameters.setPreviewSize(width, height); // 设置预览大小
+//        parameters.setPreviewFrameRate(5);  //设置每秒显示4帧
+//        parameters.setPictureSize(width, height); // 设置保存的图片尺寸
+//        parameters.setJpegQuality(80); // 设置照片质量
+
+    }
+
+    //控制图像的正确显示方向
+    private void setDispaly(Camera.Parameters parameters, Camera camera) {
+        if (Integer.parseInt(Build.VERSION.SDK) >= 8) {
+            setDisplayOrientation(camera, 90);
+        } else {
+            parameters.setRotation(90);
+        }
+
+    }
+    //实现的图像的正确显示
+    private void setDisplayOrientation(Camera camera, int i) {
+        Method downPolymorphic;
+        try{
+            downPolymorphic=camera.getClass().getMethod("setDisplayOrientation", new Class[]{int.class});
+            if(downPolymorphic!=null) {
+                downPolymorphic.invoke(camera, new Object[]{i});
+            }
+        }
+        catch(Exception e){
+            Log.e("Came_e", "图像出错");
+        }
+    }
     /**
      * 点击手机屏幕是，显示两个按钮
      */
